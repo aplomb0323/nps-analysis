@@ -3,7 +3,7 @@
 - 회사명 검색 → 목록에서 선택 → 기간 설정 → 엑셀 다운로드
 """
 import streamlit as st
-import json, time, urllib.request, urllib.parse, io
+import json, time, urllib.request, urllib.parse, urllib.error, io
 import openpyxl
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
@@ -199,10 +199,19 @@ def api_fetch(uuid, search_name, page=1, per_page=100):
            f"&{cond_key}={urllib.parse.quote(search_name)}")
     try:
         req = urllib.request.Request(url)
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        req.add_header('User-Agent', 'Mozilla/5.0')
+        req.add_header('Accept', 'application/json')
+        with urllib.request.urlopen(req, timeout=20) as resp:
             result = json.loads(resp.read().decode('utf-8'))
             return result.get('data', [])
-    except Exception:
+    except urllib.error.HTTPError as e:
+        st.toast(f"API 오류 ({uuid[:20]}...): HTTP {e.code}", icon="⚠️")
+        return []
+    except urllib.error.URLError as e:
+        st.toast(f"연결 실패: {e.reason}", icon="⚠️")
+        return []
+    except Exception as e:
+        st.toast(f"오류: {str(e)[:50]}", icon="⚠️")
         return []
 
 
@@ -479,6 +488,8 @@ if search_clicked and keyword.strip():
         results = search_companies(keyword.strip())
         st.session_state.search_results = results
         st.session_state.selected_company = None
+        if not results:
+            st.warning("검색 결과가 없습니다. API 연결을 확인하세요.")
 
 # ── 2. 사업장 선택 ──
 if st.session_state.search_results:
